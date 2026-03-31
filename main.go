@@ -1,17 +1,36 @@
 package main
 
 import (
-	"ToDoListNilchan/http"
-	"ToDoListNilchan/todo"
-	"fmt"
+	"ToDoListNilchan/internal/core"
+	"ToDoListNilchan/internal/todo/repository"
+	"ToDoListNilchan/internal/todo/service"
+	"ToDoListNilchan/internal/todo/transport"
+	"context"
+	"log"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	todoList := todo.NewList()
-	httpHandlers := http.NewHTTPHandlers(todoList)
-	httpServer := http.NewHTTPServer(httpHandlers)
+	logger, logFileClose, err := core.NewLogger("INFO")
+	if err != nil {
+		panic(err)
+	}
+	defer logFileClose()
 
-	if err := httpServer.StartServer(); err != nil {
-		fmt.Println("failed to start HTTP server:", err)
+	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGTERM)
+
+	conn, err := repository.ConnectRepository(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	postgres := repository.NewRepository(conn)
+	service := service.NewService(postgres)
+	handlers := transport.NewHTTPHandlers(service, logger)
+	server := transport.NewHTTPServer(handlers)
+
+	if err := server.StartServer(); err != nil {
+		log.Fatal(err)
 	}
 }
